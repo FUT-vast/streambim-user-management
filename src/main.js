@@ -25,7 +25,6 @@ import {
   removeFromGroupOp,
   runOps,
 } from "./data.js";
-import { createGroupBuilder } from "./groupbuilder.js";
 import { createMatrix } from "./matrix.js";
 import { mockMe, mockProjects } from "./mock-users.js";
 import { connectWidget } from "./streambim.js";
@@ -63,7 +62,6 @@ const el = {
   tabs: $("#tabs"),
   usersView: $("#users-view"),
   matrixView: $("#matrix-view"),
-  groupsView: $("#groups-view"),
 };
 
 const ctx = { rest: null, projectId: "", userEmail: "", mode: "" };
@@ -74,7 +72,6 @@ const state = {
   selected: new Set(),
   running: null,
   matrix: null,
-  groupBuilder: null,
 };
 
 /* ---------- helpers ---------- */
@@ -838,10 +835,8 @@ el.tabs.addEventListener("click", (event) => {
   for (const button of el.tabs.querySelectorAll("[data-tab]")) button.setAttribute("aria-selected", String(button === tab));
   const name = tab.dataset.tab;
   const matrix = name === "matrix";
-  const groups = name === "groups";
   el.usersView.hidden = name !== "users";
   el.matrixView.hidden = !matrix;
-  el.groupsView.hidden = !groups;
   el.batch.hidden = name !== "users" || state.selected.size === 0;
   const projects = state.projects.length ? state.projects : [{ id: ctx.projectId, name: `Projekt ${ctx.projectId}` }];
   if (matrix && !state.matrix) {
@@ -854,10 +849,6 @@ el.tabs.addEventListener("click", (event) => {
       log,
     });
     if (state.data) state.matrix.seed(state.data);
-  }
-  if (groups && !state.groupBuilder) {
-    state.groupBuilder = createGroupBuilder({ root: el.groupsView, rest: ctx.rest, projects, currentProjectId: ctx.projectId, showPreview });
-    if (state.data) state.groupBuilder.seed(state.data);
   }
 });
 

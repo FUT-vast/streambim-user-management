@@ -11,6 +11,13 @@ const MAX_PROJECTS = 20;
 const NEW_MEMBER_LEVEL = 10;
 const USER_COLUMN_WIDTH = { min: 180, max: 600 };
 
+/** House rule for group names: always a leading @, never spaces. "Projektering VVS" → "@Projektering_VVS". */
+const groupName = (value) => {
+  const bare = String(value ?? "").trim().replace(/\s+/g, "_").replace(/^@+/, "");
+  return bare ? `@${bare}` : "";
+};
+const sameGroup = (a, b) => groupName(a).toLowerCase() === groupName(b).toLowerCase();
+
 export function createMatrix({ root, rest, projects, currentProjectId, showPreview, log }) {
   const state = {
     picked: new Set([currentProjectId]),
@@ -55,10 +62,7 @@ export function createMatrix({ root, rest, projects, currentProjectId, showPrevi
 
   const $ = (selector) => root.querySelector(selector);
   const projectName = (id) => projects.find((p) => p.id === id)?.name ?? `Projekt ${id}`;
-  const findGroup = (data) => {
-    const key = state.groupName.trim().toLowerCase();
-    return data.groups.find((g) => g.name.toLowerCase() === key);
-  };
+  const findGroup = (data) => data.groups.find((g) => sameGroup(g.name, state.groupName));
   const keyOf = (pid, email) => `${pid}|${email}`;
 
   function original(pid, email) {
@@ -137,11 +141,11 @@ export function createMatrix({ root, rest, projects, currentProjectId, showPrevi
     const typed = $("#mx-group").value.trim();
     const query = typed.toLowerCase();
     const matches = state.groupNames.filter((name) => !query || name.toLowerCase().includes(query));
-    const exact = state.groupNames.some((name) => name.toLowerCase() === query);
+    const exact = state.groupNames.some((name) => sameGroup(name, typed));
     $("#mx-gpop").innerHTML =
       matches.map((name) => `<button type="button" class="mx-opt" data-name="${esc(name)}">${esc(name)}</button>`).join("") +
       (typed && !exact
-        ? `<button type="button" class="mx-opt new" data-name="${esc(typed)}">Ny grupp: <b>${esc(typed)}</b></button>`
+        ? `<button type="button" class="mx-opt new" data-name="${esc(groupName(typed))}">Ny grupp: <b>${esc(groupName(typed))}</b></button>`
         : "") +
       (!matches.length && !typed ? `<p class="muted">Inga grupper inlästa än.</p>` : "");
     $("#mx-gpop").hidden = false;
@@ -182,7 +186,7 @@ export function createMatrix({ root, rest, projects, currentProjectId, showPrevi
   }
 
   async function show() {
-    state.groupName = $("#mx-group").value.trim();
+    state.groupName = groupName($("#mx-group").value);
     if (!state.groupName) return log("Skriv eller välj en grupp.", "error");
     if (!state.picked.size) return log("Välj minst ett projekt.", "error");
     $("#mx-picker").open = false;
