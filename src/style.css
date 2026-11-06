@@ -455,13 +455,16 @@ legend { padding: 0 4px; color: var(--muted); font-size: 12px; }
   position: sticky;
   z-index: 1;
   left: 0;
-  min-width: 170px;
-  max-width: 220px;
+  width: var(--mx-user-width, 280px);
+  min-width: var(--mx-user-width, 280px);
+  max-width: var(--mx-user-width, 280px);
   background: var(--card);
   font-weight: normal;
   text-align: left;
 }
 .mx thead .mx-user { z-index: 3; background: var(--head); color: var(--muted); font-size: 12px; }
+.mx-resize { position: absolute; top: 0; right: 0; bottom: 0; width: 8px; cursor: col-resize; touch-action: none; }
+.mx-resize:hover { background: var(--accent); }
 .mx-user b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mx-user small { display: block; overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .mx-pname { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }

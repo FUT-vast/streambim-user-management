@@ -7,8 +7,9 @@
 import { WRITE_GAP_MS, addMemberOp, addToGroupOp, createGroupOp, lastAdminKept, loadProject, removeFromGroupOp } from "./data.js";
 import { esc } from "./ui.js";
 
-const MAX_PROJECTS = 15;
+const MAX_PROJECTS = 20;
 const NEW_MEMBER_LEVEL = 10;
+const USER_COLUMN_WIDTH = { min: 180, max: 600 };
 
 export function createMatrix({ root, rest, projects, currentProjectId, showPreview, log }) {
   const state = {
@@ -90,15 +91,36 @@ export function createMatrix({ root, rest, projects, currentProjectId, showPrevi
   }
 
   $("#mx-psearch").addEventListener("input", renderPicker);
+  // A change event has no shiftKey, so it is read on the mouse press.
+  let shiftHeld = false;
+  let anchor = null;
+  $("#mx-plist").addEventListener("mousedown", (event) => {
+    shiftHeld = event.shiftKey;
+    if (event.shiftKey) event.preventDefault(); // Otherwise the browser selects the text in between.
+  });
   $("#mx-plist").addEventListener("change", (event) => {
     const box = event.target;
-    if (box.checked && state.picked.size >= MAX_PROJECTS) {
-      box.checked = false;
-      return log(`Högst ${MAX_PROJECTS} projekt åt gången.`, "error");
+    const boxes = [...$("#mx-plist").querySelectorAll("input")];
+    const from = boxes.findIndex((item) => item.value === anchor);
+    const to = boxes.indexOf(box);
+    let range = [box];
+    if (shiftHeld && from >= 0) {
+      range = boxes.slice(Math.min(from, to), Math.max(from, to) + 1);
+      if (from > to) range.reverse(); // Fill from the anchor, so the project limit cuts off the far end.
     }
-    if (box.checked) state.picked.add(box.value);
-    else state.picked.delete(box.value);
+    shiftHeld = false;
+    anchor = box.value;
+
+    const checked = box.checked;
+    let full = false;
+    for (const item of range) {
+      if (!checked) state.picked.delete(item.value);
+      else if (state.picked.has(item.value) || state.picked.size < MAX_PROJECTS) state.picked.add(item.value);
+      else full = true;
+      item.checked = state.picked.has(item.value);
+    }
     $("#mx-picked").textContent = `Projekt (${state.picked.size} valda)`;
+    if (full) log(`Högst ${MAX_PROJECTS} projekt åt gången.`, "error");
   });
 
   function renderGroupNames() {
@@ -235,7 +257,7 @@ export function createMatrix({ root, rest, projects, currentProjectId, showPrevi
       )
       .join("");
     $("#mx-table").innerHTML = rows.length
-      ? `<table class="mx"><thead><tr><th class="mx-user">${rows.length} användare</th>${head}</tr></thead><tbody>${body}</tbody></table>`
+      ? `<table class="mx"><thead><tr><th class="mx-user">${rows.length} användare<span class="mx-resize" title="Dra för att ändra bredden"></span></th>${head}</tr></thead><tbody>${body}</tbody></table>`
       : `<p class="empty">Inga användare matchar.</p>`;
     renderBar();
   }
@@ -266,6 +288,22 @@ export function createMatrix({ root, rest, projects, currentProjectId, showPrevi
     setWanted(box.dataset.pid, box.dataset.email, box.checked);
     box.closest("td").classList.toggle("changed", state.changes.has(keyOf(box.dataset.pid, box.dataset.email)));
     renderBar();
+  });
+
+  // The width lives on root, so it survives the table being re-rendered.
+  $("#mx-table").addEventListener("pointerdown", (event) => {
+    const handle = event.target;
+    if (!handle.classList.contains("mx-resize")) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = handle.parentElement.offsetWidth;
+    const move = (e) => {
+      const width = Math.min(USER_COLUMN_WIDTH.max, Math.max(USER_COLUMN_WIDTH.min, startWidth + e.clientX - startX));
+      root.style.setProperty("--mx-user-width", `${width}px`);
+    };
+    handle.setPointerCapture(event.pointerId);
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("lostpointercapture", () => handle.removeEventListener("pointermove", move), { once: true });
   });
 
   $("#mx-filter").addEventListener("input", (event) => {
