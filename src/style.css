@@ -43,6 +43,13 @@ body { margin: 0; background: var(--bg); }
   padding: 14px 12px 12px;
 }
 
+/* Until the customer admin check has passed, only the header and status show. */
+body.locked .tabs,
+body.locked .project-row,
+body.locked .filters,
+body.locked .summary,
+body.locked #popout { display: none; }
+
 /* ---------- header ---------- */
 
 .top {

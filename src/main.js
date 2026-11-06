@@ -12,6 +12,7 @@ import {
   addMemberOp,
   addToGroupOp,
   createGroupOp,
+  isCustomerAdmin,
   lastAdminKept,
   levelName,
   liveRest,
@@ -867,6 +868,20 @@ function setOrgs(orgs) {
   }
   el.status.dataset.mode = ctx.mode;
   el.status.textContent = modeLabel[ctx.mode] || ctx.mode;
+
+  // The page starts locked and opens only on a clear yes, so any failure keeps it closed.
+  let allowed = false;
+  try {
+    allowed = await loader.track("Kontrollerar behörighet", isCustomerAdmin(ctx.rest, ctx.projectId, ctx.userEmail));
+  } catch (error) {
+    log(error.message, "error");
+  }
+  if (!allowed) {
+    ctx.rest = null; // Also shuts the bridge to popout windows.
+    el.list.innerHTML = `<p class="empty">Den här widgeten är bara tillgänglig för kundadministratörer.</p>`;
+    return;
+  }
+  document.body.classList.remove("locked");
 
   const projectsKey = `projects:${ctx.mode}:${ctx.userEmail}`;
   const orgsKey = `orgs:${ctx.mode}`;

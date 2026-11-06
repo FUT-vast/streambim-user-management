@@ -108,6 +108,13 @@ export function mockRest() {
 
   return async (path, { method = "GET", body } = {}) => {
     await sleep(60);
+    if (path.startsWith("/mgw/api/v3/customers")) {
+      return { data: [{ id: "1", type: "customers", attributes: { "customer-admins": [mockMe] } }] };
+    }
+    if (path.startsWith("/mgw/api/v3/projects/")) {
+      const relationships = { customer: { data: { type: "customers", id: "1" } } };
+      return { data: { id: path.split("/").pop(), type: "projects", relationships } };
+    }
     if (path.startsWith("/mgw/api/v3/projects")) {
       return { data: mockProjects.map((p) => ({ id: p.id, type: "projects", attributes: { name: p.name } })) };
     }
@@ -210,6 +217,20 @@ export function mockRest() {
 const base = (projectId) => `/project-${projectId}/api/v1/v2`;
 const memberId = (projectId, email) => `${projectId}-${email}`;
 const relId = (resource, name) => resource?.relationships?.[name]?.data?.id ?? null;
+
+/**
+ * Is this user a customer admin of the customer that owns the project?
+ * Read from the customer, as the StreamBIM app does: a customer admin does not
+ * have to be a member of the project, so project-members cannot answer this.
+ */
+export async function isCustomerAdmin(rest, projectId, email) {
+  const [project, customers] = await Promise.all([rest(`/mgw/api/v3/projects/${projectId}`), rest("/mgw/api/v3/customers")]);
+  const customerId = relId(project?.data, "customer");
+  const customer = (customers?.data ?? []).find((c) => String(c.id) === String(customerId));
+  const admins = customer?.attributes?.["customer-admins"];
+  const me = String(email).trim().toLowerCase();
+  return Array.isArray(admins) && admins.some((admin) => String(admin).trim().toLowerCase() === me);
+}
 
 export async function loadProjects(rest) {
   const res = await rest("/mgw/api/v3/projects");
