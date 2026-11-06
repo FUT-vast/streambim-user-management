@@ -1,10 +1,8 @@
 /**
  * User manager: list, filter and batch-edit the members of a StreamBIM project.
- * Connection lives in src/streambim.js, REST and batch logic in src/data.js,
- * the popout window in src/bridge.js.
+ * Connection lives in src/streambim.js, REST and batch logic in src/data.js.
  */
 
-import { connectBridge, serveBridge } from "./bridge.js";
 import {
   ASSIGNABLE_LEVELS,
   LEVELS,
@@ -35,7 +33,6 @@ import "./style.css";
 const $ = (selector) => document.querySelector(selector);
 const el = {
   status: $("#status"),
-  popout: $("#popout"),
   project: $("#project"),
   reload: $("#reload"),
   search: $("#search"),
@@ -103,19 +100,9 @@ function loadWidgetApi() {
 
 async function connect(loader) {
   const params = new URLSearchParams(location.search);
-  const popout = params.has("popout");
-  if (popout) {
-    document.body.classList.add("wide");
-    el.popout.hidden = true;
-    const bridge = connectBridge();
-    if (!bridge) throw new Error("Öppna det stora fönstret från widgeten i StreamBIM.");
-    Object.assign(ctx, await loader.track("Kopplar till widgeten i StreamBIM", bridge.context()), { rest: bridge.rest });
-    return;
-  }
   if (params.has("mock")) {
     await loader.track("Startar med testdata", Promise.resolve());
     Object.assign(ctx, { rest: mockRest(), projectId: mockProjects[0].id, userEmail: mockMe, mode: "mock" });
-    serveBridge(() => ctx);
     return;
   }
   await loader.track("Laddar widget-API", loadWidgetApi());
@@ -134,7 +121,6 @@ async function connect(loader) {
   } else {
     throw new Error(client.reason || "Ingen kontakt med StreamBIM.");
   }
-  serveBridge(() => ctx);
 }
 
 /* ---------- loading ---------- */
@@ -824,11 +810,6 @@ el.exportBtn.addEventListener("click", () => state.data && openExport());
 el.sheetClose.addEventListener("click", closeSheet);
 el.sheet.addEventListener("click", (event) => event.target === el.sheet && closeSheet());
 document.addEventListener("keydown", (event) => event.key === "Escape" && closeSheet());
-el.popout.addEventListener("click", () => {
-  const win = window.open(`${location.pathname}?popout=1`, "user-manager", "popup,width=1280,height=820");
-  if (!win) log("Webbläsaren blockerade fönstret. Tillåt popup-fönster för StreamBIM.", "error");
-});
-
 el.tabs.addEventListener("click", (event) => {
   const tab = event.target.closest("[data-tab]");
   if (!tab || !ctx.rest) return;
@@ -906,7 +887,7 @@ function setOrgs(orgs) {
     log(error.message, "error");
   }
   if (!allowed) {
-    ctx.rest = null; // Also shuts the bridge to popout windows.
+    ctx.rest = null;
     el.list.innerHTML = `<p class="empty">Den här widgeten är bara tillgänglig för kundadministratörer.</p>`;
     return;
   }
