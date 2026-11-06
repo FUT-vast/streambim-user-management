@@ -55,7 +55,7 @@ body.locked .summary { display: none; }
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
   margin: -14px -12px 0;
   padding: 10px 12px;
@@ -63,8 +63,7 @@ body.locked .summary { display: none; }
   color: #fff;
 }
 
-.top-title { display: flex; align-items: center; gap: 14px; min-width: 0; }
-.top-logo { flex: none; width: auto; height: 32px; }
+.top-logo { flex: none; width: auto; height: 32px; margin-left: 8px; }
 
 .kicker { margin: 0 0 1px; color: var(--line); font-size: 12px; }
 
