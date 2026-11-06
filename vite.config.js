@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 
-// Relative base so the same build works on a Vercel root domain.
+// Relative base so the build works wherever it is hosted.
 export default defineConfig({
   base: "./",
   server: {
