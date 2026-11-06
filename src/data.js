@@ -108,7 +108,7 @@ export function mockRest() {
 
   return async (path, { method = "GET", body } = {}) => {
     await sleep(60);
-    if (path.startsWith("/mgw/api/v3/customers")) {
+    if (path.startsWith("/mgw/api/v2/customers")) {
       return { data: [{ id: "1", type: "customers", attributes: { "customer-admins": [mockMe] } }] };
     }
     if (path.startsWith("/mgw/api/v3/projects/")) {
@@ -222,9 +222,10 @@ const relId = (resource, name) => resource?.relationships?.[name]?.data?.id ?? n
  * Is this user a customer admin of the customer that owns the project?
  * Read from the customer, as the StreamBIM app does: a customer admin does not
  * have to be a member of the project, so project-members cannot answer this.
+ * Customers are served by API v2, unlike projects (v3).
  */
 export async function isCustomerAdmin(rest, projectId, email) {
-  const [project, customers] = await Promise.all([rest(`/mgw/api/v3/projects/${projectId}`), rest("/mgw/api/v3/customers")]);
+  const [project, customers] = await Promise.all([rest(`/mgw/api/v3/projects/${projectId}`), rest("/mgw/api/v2/customers")]);
   const customerId = relId(project?.data, "customer");
   const customer = (customers?.data ?? []).find((c) => String(c.id) === String(customerId));
   const admins = customer?.attributes?.["customer-admins"];
