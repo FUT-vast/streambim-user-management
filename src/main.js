@@ -928,7 +928,7 @@ function setOrgs(orgs) {
   if (cache.read(orgsKey)) setOrgs(cache.read(orgsKey));
 
   // The member list does not wait for the project and organisation lists.
-  loader
+  const projectsReady = loader
     .track("Projektlista", loadProjects(ctx.rest))
     .then((projects) => {
       cache.write(projectsKey, projects);
@@ -944,4 +944,9 @@ function setOrgs(orgs) {
     .catch(() => {});
   await loadAll(ctx.projectId, loader);
   renderActionFields();
+
+  // Gruppmedlemmar opens first, once its project picker can list every project.
+  await projectsReady;
+  const usersTab = el.tabs.querySelector('[data-tab="users"]');
+  if (usersTab.getAttribute("aria-selected") === "true") el.tabs.querySelector('[data-tab="matrix"]').click();
 })();
