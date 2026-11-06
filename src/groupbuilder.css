@@ -1,42 +1,21 @@
 /* ---------- group builder (Skapa grupper) ---------- */
 
-.gb-mode { display: flex; flex-wrap: wrap; gap: 0; }
-.gb-mode button {
-  padding: 6px 12px;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: var(--card);
-  color: var(--muted);
-  font-weight: 600;
-}
-.gb-mode button:first-child { border-radius: 6px 0 0 6px; }
-.gb-mode button:last-child { border-left: 0; border-radius: 0 6px 6px 0; }
-.gb-mode button[aria-checked="true"] { border-color: var(--accent); background: var(--accent); color: #fff; }
-
 .gb-admin { flex: 0 1 240px; }
 .gb-admin[hidden] { display: none; }
 .gb-note { margin: 0; font-size: 13px; font-weight: 600; }
 .gb-note.muted { font-weight: normal; }
 .gb-note.new { color: var(--warn); }
-.gb-note.add { color: var(--accent); }
+.gb-note.add { color: var(--accent-ink); }
 .gb-note.bad { color: var(--bad); }
 .gb-sub { display: block; color: var(--muted); font-size: 11px; }
 .gb tbody tr[data-email] { cursor: pointer; }
 .gb tr.inactive b { color: var(--muted); }
 
-.gb-by { display: flex; flex-wrap: wrap; gap: 12px; min-height: 34px; align-items: center; color: var(--ink); font-size: 14px; }
-
 .gb { width: 100%; border-collapse: collapse; font-size: 13px; }
 .gb th, .gb td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
-.gb thead th { position: sticky; z-index: 1; top: 0; background: #f4f7fa; color: var(--muted); font-size: 12px; }
+.gb thead th { position: sticky; z-index: 1; top: 0; background: var(--head); color: var(--muted); font-size: 12px; }
 .gb .gb-c { width: 32px; text-align: center; }
 .gb tr.done { color: var(--muted); }
-.gb summary { cursor: pointer; }
-.gb details ul { margin: 4px 0 0; padding-left: 16px; }
-.gb details li small { color: var(--muted); }
-.gb details li.add::marker { color: var(--accent); content: "+ "; }
 
 .gb-st { font-size: 12px; font-weight: 600; white-space: nowrap; }
-.gb-st.new { color: var(--warn); }
-.gb-st.add { color: var(--accent); }
 .gb-st.ok { color: var(--ok); }

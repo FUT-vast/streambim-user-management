@@ -1,8 +1,5 @@
 /**
- * Group builder, two modes:
- *  - Manuellt (default): name a group and tick its members by hand.
- *  - Automatiskt: one group per organisation and/or title, named
- *    `@<org>_<title>`.
+ * Group builder: name a group and tick its members by hand.
  * Every group name starts with @ and has _ instead of spaces (see groupName).
  * A group that already exists gets the missing members added. Nobody is
  * removed from any group.
@@ -24,9 +21,7 @@ export function createGroupBuilder({ root, rest, projects, currentProjectId, sho
   const state = {
     projectId: currentProjectId,
     data: null,
-    mode: "manual",
     manual: { selected: new Set(), admin: "" },
-    auto: { unchecked: new Set(), open: new Set() },
   };
 
   root.innerHTML = `
@@ -37,13 +32,6 @@ export function createGroupBuilder({ root, rest, projects, currentProjectId, sho
           .filter((p) => !p.inactive || p.id === currentProjectId)
           .map((p) => option(p.id, `${p.name}${p.id === currentProjectId ? " (öppet)" : ""}`, p.id === currentProjectId))
           .join("")}</select>
-      </div>
-      <div class="mx-field">
-        <span>Sätt</span>
-        <div id="gb-mode" class="gb-mode" role="radiogroup" aria-label="Sätt att skapa grupper">
-          <button type="button" role="radio" data-mode="manual" aria-checked="true">Manuellt</button>
-          <button type="button" role="radio" data-mode="auto" aria-checked="false">Automatiskt efter titel/organisation</button>
-        </div>
       </div>
     </div>
 
@@ -68,23 +56,6 @@ export function createGroupBuilder({ root, rest, projects, currentProjectId, sho
       <div id="gb-people" class="mx-wrap"><p class="empty">Laddar…</p></div>
     </div>
 
-    <div id="gb-auto" class="view" hidden>
-      <div class="mx-controls">
-        <div class="mx-field">
-          <span>Skapa grupper efter</span>
-          <div class="gb-by">
-            <label class="check"><input id="gb-org" type="checkbox" checked /> Organisation</label>
-            <label class="check"><input id="gb-title" type="checkbox" /> Titel</label>
-          </div>
-        </div>
-      </div>
-      <div class="mx-head">
-        <label class="check"><input id="gb-inactive" type="checkbox" /> Ta med inaktiva</label>
-        <span class="muted">Användare utan värde hoppas över. En ny grupp får medlemmen med högst roll som gruppadmin.</span>
-      </div>
-      <div id="gb-list" class="mx-wrap"><p class="empty">Laddar…</p></div>
-    </div>
-
     <div id="gb-bar" class="batch" hidden>
       <span id="gb-count" class="batch-count"></span>
       <button id="gb-preview" type="button" class="primary">Förhandsgranska</button>
@@ -100,14 +71,7 @@ export function createGroupBuilder({ root, rest, projects, currentProjectId, sho
   };
 
   function render() {
-    $("#gb-manual").hidden = state.mode !== "manual";
-    $("#gb-auto").hidden = state.mode !== "auto";
-    for (const button of $("#gb-mode").querySelectorAll("[data-mode]")) {
-      button.setAttribute("aria-checked", String(button.dataset.mode === state.mode));
-    }
-    if (!state.data) return;
-    if (state.mode === "manual") renderManual();
-    else renderAuto();
+    if (state.data) renderManual();
   }
 
   /* ---------- manual ---------- */
@@ -254,135 +218,12 @@ export function createGroupBuilder({ root, rest, projects, currentProjectId, sho
     tr.querySelector("input:not(:disabled)")?.click();
   });
 
-  /* ---------- automatic ---------- */
-
-  function proposals() {
-    const byOrg = $("#gb-org").checked;
-    const byTitle = $("#gb-title").checked;
-    if (!byOrg && !byTitle) return [];
-    const inactive = $("#gb-inactive").checked;
-    const found = new Map();
-    for (const row of state.data.rows) {
-      if (row.level === 0 && !inactive) continue;
-      const parts = [byOrg && clean(row.organization), byTitle && clean(row.title)].filter((part) => part !== false);
-      if (parts.some((part) => !part)) continue;
-      const name = groupName(parts.join("_"));
-      const key = name.toLowerCase();
-      if (!found.has(key)) found.set(key, { key, name, rows: [] });
-      found.get(key).rows.push(row);
-    }
-    return [...found.values()]
-      .map((entry) => {
-        const existing = findGroup(entry.name);
-        const missing = entry.rows.filter((row) => !existing || !row.groups.has(existing.id));
-        return { ...entry, existing, missing, actionable: !existing?.readOnly && missing.length > 0 };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name, "sv"));
-  }
-
-  const picked = (list) => list.filter((entry) => entry.actionable && !state.auto.unchecked.has(entry.key));
-
-  function status(entry) {
-    if (entry.existing?.readOnly) return `<span class="gb-st muted">skrivskyddad</span>`;
-    if (!entry.existing) return `<span class="gb-st new">ny grupp</span>`;
-    if (!entry.missing.length) return `<span class="gb-st ok">finns, alla med</span>`;
-    return `<span class="gb-st add">finns, ${entry.missing.length} läggs till</span>`;
-  }
-
-  function renderAuto() {
-    const list = proposals();
-    const chosen = picked(list);
-    if (!$("#gb-org").checked && !$("#gb-title").checked) {
-      $("#gb-list").innerHTML = `<p class="empty">Välj organisation, titel eller båda.</p>`;
-    } else if (!list.length) {
-      $("#gb-list").innerHTML = `<p class="empty">Inga användare har värden att gruppera på.</p>`;
-    } else {
-      const actionable = list.filter((entry) => entry.actionable);
-      $("#gb-list").innerHTML = `
-        <table class="gb">
-          <thead><tr>
-            <th class="gb-c"><input id="gb-all" type="checkbox" ${actionable.length && chosen.length === actionable.length ? "checked" : ""} ${
-              actionable.length ? "" : "disabled"
-            } aria-label="Välj alla" /></th>
-            <th>Grupp</th><th>Medlemmar</th><th>Status</th>
-          </tr></thead>
-          <tbody>${list
-            .map(
-              (entry) => `
-            <tr class="${entry.actionable ? "" : "done"}">
-              <td class="gb-c"><input type="checkbox" data-key="${esc(entry.key)}" ${entry.actionable && !state.auto.unchecked.has(entry.key) ? "checked" : ""} ${
-                entry.actionable ? "" : "disabled"
-              } /></td>
-              <td><b>${esc(entry.name)}</b></td>
-              <td>
-                <details data-key="${esc(entry.key)}" ${state.auto.open.has(entry.key) ? "open" : ""}>
-                  <summary>${entry.rows.length} användare</summary>
-                  <ul>${entry.rows
-                    .map((row) => `<li class="${entry.missing.includes(row) ? "add" : ""}">${esc(row.name || row.email)} <small>${esc(row.email)}</small></li>`)
-                    .join("")}</ul>
-                </details>
-              </td>
-              <td>${status(entry)}</td>
-            </tr>`,
-            )
-            .join("")}</tbody>
-        </table>`;
-    }
-    const creates = chosen.filter((entry) => !entry.existing).length;
-    const adds = chosen.reduce((sum, entry) => sum + entry.missing.length, 0);
-    $("#gb-bar").hidden = chosen.length === 0;
-    $("#gb-preview").disabled = false;
-    $("#gb-count").textContent = `${chosen.length} grupper · ${creates} nya · ${adds} medlemskap`;
-  }
-
-  function buildAutoOps() {
-    const ops = [];
-    const pid = state.data.projectId;
-    const list = proposals();
-    for (const entry of picked(list)) {
-      const group = entry.existing ? { ...entry.existing } : { id: null, name: entry.name };
-      // A new group needs a group admin: the member with the highest role becomes it.
-      const rows = entry.existing ? entry.missing : [...entry.missing].sort(byRank);
-      if (!entry.existing) ops.push(createGroupOp(pid, projectName(pid), group));
-      rows.forEach((row, i) => ops.push(addToGroupOp(pid, row.email, group, !entry.existing && i === 0)));
-    }
-    const skipped = list.filter((entry) => entry.existing?.readOnly).map((entry) => `${entry.name}: skrivskyddad grupp, kan inte ändras`);
-    return { ops, skipped };
-  }
-
-  for (const id of ["#gb-org", "#gb-title", "#gb-inactive"]) $(id).addEventListener("input", render);
-
-  $("#gb-list").addEventListener("change", (event) => {
-    const box = event.target;
-    if (box.id === "gb-all") {
-      for (const entry of proposals()) {
-        if (box.checked) state.auto.unchecked.delete(entry.key);
-        else state.auto.unchecked.add(entry.key);
-      }
-    } else if (box.dataset.key) {
-      if (box.checked) state.auto.unchecked.delete(box.dataset.key);
-      else state.auto.unchecked.add(box.dataset.key);
-    } else return;
-    render();
-  });
-
-  $("#gb-list").addEventListener(
-    "toggle",
-    (event) => {
-      const key = event.target.dataset?.key;
-      if (!key) return;
-      if (event.target.open) state.auto.open.add(key);
-      else state.auto.open.delete(key);
-    },
-    true,
-  );
-
   /* ---------- shared ---------- */
 
   async function load(projectId) {
     state.projectId = projectId;
     state.data = null;
-    $("#gb-people").innerHTML = $("#gb-list").innerHTML = `<p class="empty">Laddar…</p>`;
+    $("#gb-people").innerHTML = `<p class="empty">Laddar…</p>`;
     $("#gb-bar").hidden = true;
     try {
       const data = await loadProject(rest, projectId);
@@ -390,7 +231,7 @@ export function createGroupBuilder({ root, rest, projects, currentProjectId, sho
       use(data);
     } catch {
       const message = `<p class="empty">Kan inte läsa ${esc(projectName(projectId))}. Du behöver vara projektadmin där.</p>`;
-      $("#gb-people").innerHTML = $("#gb-list").innerHTML = message;
+      $("#gb-people").innerHTML = message;
     }
   }
 
@@ -403,30 +244,20 @@ export function createGroupBuilder({ root, rest, projects, currentProjectId, sho
 
   $("#gb-project").addEventListener("change", (event) => {
     state.manual.selected.clear();
-    state.auto.unchecked.clear();
     load(event.target.value);
-  });
-
-  $("#gb-mode").addEventListener("click", (event) => {
-    const button = event.target.closest("[data-mode]");
-    if (!button) return;
-    state.mode = button.dataset.mode;
-    render();
   });
 
   $("#gb-preview").addEventListener("click", () => {
     if (!state.data) return;
-    const manual = state.mode === "manual";
-    const { ops, skipped } = manual ? buildManualOps() : buildAutoOps();
+    const { ops, skipped } = buildManualOps();
     showPreview(ops, skipped, async () => {
-      if (manual) state.manual.selected.clear();
+      state.manual.selected.clear();
       await load(state.projectId);
     });
   });
 
   $("#gb-clear").addEventListener("click", () => {
-    if (state.mode === "manual") state.manual.selected.clear();
-    else for (const entry of proposals()) state.auto.unchecked.add(entry.key);
+    state.manual.selected.clear();
     render();
   });
 
