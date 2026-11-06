@@ -8,13 +8,11 @@ import { WRITE_GAP_MS, addMemberOp, addToGroupOp, createGroupOp, lastAdminKept, 
 import { esc } from "./ui.js";
 
 const MAX_PROJECTS = 15;
-/** Projects ticked from the start besides the open one (hackathon test projects). */
-const DEFAULT_PROJECTS = /^användarhantering/i;
 const NEW_MEMBER_LEVEL = 10;
 
 export function createMatrix({ root, rest, projects, currentProjectId, showPreview, log }) {
   const state = {
-    picked: new Set([currentProjectId, ...projects.filter((p) => DEFAULT_PROJECTS.test(p.name)).map((p) => p.id)].slice(0, MAX_PROJECTS)),
+    picked: new Set([currentProjectId]),
     loaded: new Map(),
     groupName: "",
     groupNames: [],
