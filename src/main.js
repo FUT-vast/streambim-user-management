@@ -30,6 +30,7 @@ import { createMatrix } from "./matrix.js";
 import { mockMe, mockProjects } from "./mock-users.js";
 import { connectWidget } from "./streambim.js";
 import { createLoader, esc, option } from "./ui.js";
+import { readXlsx, xlsxBlob } from "./xlsx.js";
 import "./style.css";
 
 const $ = (selector) => document.querySelector(selector);
@@ -426,25 +427,44 @@ function buildEditOps(row, form) {
   return { ops, skipped };
 }
 
-/** CSV/TSV: e-post;förnamn;efternamn;organisation;titel;roll;grupper (grupper separerade med |). */
-function parseImport(text) {
-  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  const rows = [];
-  for (const line of lines) {
-    const cells = line.split(/\t|;|,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((c) => c.trim().replace(/^"|"$/g, ""));
-    if (!cells[0].includes("@")) continue;
-    const [email, given = "", family = "", organization = "", title = "", role = "", groups = ""] = cells;
-    rows.push({
+const SHEET_HEADER = ["e-post", "förnamn", "efternamn", "organisation", "titel", "roll", "grupper"];
+const ROLE_COLUMN = SHEET_HEADER.indexOf("roll");
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
+/** Roles the widget can set: not Inaktiv, and Kundadmin and Ägare are refused by the server. */
+const SETTABLE_LEVELS = ASSIGNABLE_LEVELS.filter(([level]) => level > 0);
+
+const sheetBlob = (rows) => xlsxBlob([SHEET_HEADER, ...rows], { column: ROLE_COLUMN, values: SETTABLE_LEVELS.map(([, name]) => name) });
+
+/** Rows in the column order of SHEET_HEADER. Rows without an e-mail address, like the header, are skipped. */
+function toEntries(rows) {
+  const entries = [];
+  for (const row of rows) {
+    const [email = "", given = "", family = "", organization = "", title = "", role = "", groups = ""] = row.map((cell) => String(cell).trim());
+    if (!email.includes("@")) continue;
+    entries.push({
       email: email.toLowerCase(),
       given,
       family,
       organization,
       title,
+      role,
       level: parseLevel(role),
       groups: groups.split("|").map((g) => g.trim()).filter(Boolean),
     });
   }
-  return rows;
+  return entries;
+}
+
+/** CSV/TSV: e-post;förnamn;efternamn;organisation;titel;roll;grupper (grupper separerade med |). */
+function parseImport(text) {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  return toEntries(lines.map((line) => line.split(/\t|;|,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map((c) => c.trim().replace(/^"|"$/g, ""))));
+}
+
+/** Blank, unchanged or a role in the list. Users above Projektadmin keep their role, as in the edit dialog. */
+function roleAllowed(entry, row) {
+  if (!entry.role || entry.level === row?.level) return true;
+  return SETTABLE_LEVELS.some(([level]) => level === entry.level) && !(row?.level > 20);
 }
 
 /**
@@ -476,6 +496,10 @@ function buildImportOps(data, projectName, prefix, entries, defaultLevel, invite
   for (const entry of entries) {
     const row = data.rowByEmail.get(entry.email);
     const org = entry.organization ? orgByName(entry.organization) : null;
+    if (!roleAllowed(entry, row)) {
+      skipped.push(`${entry.email}: rollen ${entry.role} kan inte sättas`);
+      continue;
+    }
     if (row) {
       const attrs = {};
       if (entry.given && entry.given !== row.given) attrs["given-name"] = entry.given;
@@ -631,14 +655,19 @@ function openImport() {
   const others = state.projects.filter((p) => p.id !== current && !p.inactive);
   const currentName = state.projects.find((p) => p.id === current)?.name ?? `Projekt ${current}`;
   openSheet(
-    "Lägg till användare",
+    "Importera användare",
     `
     <form id="import-form" class="form">
-      <p class="muted">E-post, en per rad, eller klistra in från Excel:
+      <p class="muted">Fyll i Excel-mallen och välj filen, eller klistra in e-post, en per rad:
       <code>e-post;förnamn;efternamn;organisation;titel;roll;grupper</code>.
-      Roll som namn eller nivå (Gäst, Användare, Projektadmin…). Grupper per rad skiljs med <code>|</code>.
+      Grupper per rad skiljs med <code>|</code>.
       Befintliga användare uppdateras bara i ifyllda fält.</p>
-      <textarea name="text" rows="6" placeholder="kalle@firma.se;Kalle;Ek;Firma AB;Konstruktör;Användare"></textarea>
+      <div class="sheet-actions">
+        <a id="template" class="button ghost" download="anvandare-mall.xlsx">Ladda ner Excel-mall</a>
+        <input id="imp-file" type="file" accept=".xlsx,.csv" aria-label="Fil att importera" />
+      </div>
+      <p id="imp-status" class="muted"></p>
+      <textarea name="text" rows="4" placeholder="kalle@firma.se;Kalle;Ek;Firma AB;Konstruktör;Användare"></textarea>
       <div class="two">
         <label>Roll om tom<select name="level">${ASSIGNABLE_LEVELS.filter(([v]) => v > 0)
           .map(([v, n]) => option(v, n, v === 10))
@@ -666,6 +695,22 @@ function openImport() {
     </form>`,
   );
   const form = el.sheetBody.querySelector("#import-form");
+  form.querySelector("#template").href = URL.createObjectURL(sheetBlob([]));
+  let fileEntries = null;
+  form.querySelector("#imp-file").addEventListener("change", async (event) => {
+    const file = event.target.files[0];
+    const status = form.querySelector("#imp-status");
+    fileEntries = null;
+    status.textContent = "";
+    if (!file) return;
+    try {
+      if (file.size > MAX_IMPORT_BYTES) throw new Error("Filen är större än 5 MB.");
+      fileEntries = /\.csv$/i.test(file.name) ? parseImport(await file.text()) : toEntries(await readXlsx(await file.arrayBuffer()));
+      status.textContent = `${fileEntries.length} användare i ${file.name}.`;
+    } catch (error) {
+      status.textContent = error.message;
+    }
+  });
   form.querySelector("#imp-psearch").addEventListener("input", (event) => {
     const query = event.target.value.trim().toLowerCase();
     for (const label of form.querySelectorAll("#imp-plist label[data-name]")) {
@@ -674,7 +719,7 @@ function openImport() {
   });
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const entries = parseImport(form.elements.text.value);
+    const entries = fileEntries ?? parseImport(form.elements.text.value);
     if (!entries.length) return log("Hittade inga rader med e-postadress.", "error");
     const level = Number(form.elements.level.value);
     const invite = form.elements.invite.checked;
@@ -708,34 +753,27 @@ function openImport() {
 function openExport() {
   const rows = filteredRows();
   const cell = (value) => (/[;"\n]/.test(value) ? `"${String(value).replace(/"/g, '""')}"` : value);
-  const csv = [
-    "e-post;förnamn;efternamn;organisation;titel;roll;grupper",
-    ...rows.map((row) =>
-      [
-        row.email,
-        row.given,
-        row.family,
-        row.organization,
-        row.title,
-        levelName(row.level),
-        [...row.groups.keys()].map(groupById).filter((g) => g && !g.readOnly).map((g) => g.name).join("|"),
-      ]
-        .map(cell)
-        .join(";"),
-    ),
-  ].join("\n");
+  const sheetRows = rows.map((row) => [
+    row.email,
+    row.given,
+    row.family,
+    row.organization,
+    row.title,
+    levelName(row.level),
+    [...row.groups.keys()].map(groupById).filter((g) => g && !g.readOnly).map((g) => g.name).join("|"),
+  ]);
+  const csv = [SHEET_HEADER.join(";"), ...sheetRows.map((row) => row.map(cell).join(";"))].join("\n");
   openSheet(
     `Exportera ${rows.length} användare`,
     `
-    <p class="muted">Samma format som importen: ändra i Excel och klistra tillbaka under <b>Lägg till</b>.</p>
+    <p class="muted">Samma format som importen: ändra i Excel och ladda upp filen under <b>Importera</b>. Kolumnen roll är en lista med roller som går att sätta.</p>
     <textarea rows="10" readonly>${esc(csv)}</textarea>
     <div class="sheet-actions">
-      <button type="button" id="copy" class="primary">Kopiera</button>
-      <a id="download" class="button ghost" download="anvandare-${esc(state.data.projectId)}.csv">Ladda ner .csv</a>
+      <a id="download" class="button primary" download="anvandare-${esc(state.data.projectId)}.xlsx">Ladda ner Excel</a>
+      <button type="button" id="copy" class="ghost">Kopiera</button>
     </div>`,
   );
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
-  el.sheetBody.querySelector("#download").href = URL.createObjectURL(blob);
+  el.sheetBody.querySelector("#download").href = URL.createObjectURL(sheetBlob(sheetRows));
   el.sheetBody.querySelector("#copy").addEventListener("click", async (event) => {
     const area = el.sheetBody.querySelector("textarea");
     try {

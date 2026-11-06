@@ -35,6 +35,7 @@ export function createMatrix({ root, rest, projects, currentProjectId, showPrevi
           <summary id="mx-picked">Projekt</summary>
           <div class="mx-pop">
             <input id="mx-psearch" type="search" placeholder="Sök projekt…" />
+            <button id="mx-pall" type="button" class="ghost">Välj alla</button>
             <div id="mx-plist" class="mx-plist"></div>
           </div>
         </details>
@@ -87,39 +88,39 @@ export function createMatrix({ root, rest, projects, currentProjectId, showPrevi
         }</span></label>`,
       )
       .join("");
-    $("#mx-picked").textContent = `Projekt (${state.picked.size} valda)`;
+    renderPickedCount();
   }
 
+  const pickerBoxes = () => [...$("#mx-plist").querySelectorAll("input")];
+
+  function renderPickedCount() {
+    $("#mx-picked").textContent = `Projekt (${state.picked.size} valda)`;
+    $("#mx-pall").textContent = canSelectMore() ? "Välj alla" : "Avmarkera alla";
+  }
+
+  // At the project limit the button can only clear, even if some rows are unticked.
+  const canSelectMore = () => state.picked.size < MAX_PROJECTS && pickerBoxes().some((box) => !box.checked);
+
   $("#mx-psearch").addEventListener("input", renderPicker);
-  // A change event has no shiftKey, so it is read on the mouse press.
-  let shiftHeld = false;
-  let anchor = null;
-  $("#mx-plist").addEventListener("mousedown", (event) => {
-    shiftHeld = event.shiftKey;
-    if (event.shiftKey) event.preventDefault(); // Otherwise the browser selects the text in between.
-  });
   $("#mx-plist").addEventListener("change", (event) => {
     const box = event.target;
-    const boxes = [...$("#mx-plist").querySelectorAll("input")];
-    const from = boxes.findIndex((item) => item.value === anchor);
-    const to = boxes.indexOf(box);
-    let range = [box];
-    if (shiftHeld && from >= 0) {
-      range = boxes.slice(Math.min(from, to), Math.max(from, to) + 1);
-      if (from > to) range.reverse(); // Fill from the anchor, so the project limit cuts off the far end.
+    if (box.checked && state.picked.size >= MAX_PROJECTS) {
+      box.checked = false;
+      return log(`Högst ${MAX_PROJECTS} projekt åt gången.`, "error");
     }
-    shiftHeld = false;
-    anchor = box.value;
-
-    const checked = box.checked;
-    let full = false;
-    for (const item of range) {
-      if (!checked) state.picked.delete(item.value);
-      else if (state.picked.has(item.value) || state.picked.size < MAX_PROJECTS) state.picked.add(item.value);
-      else full = true;
-      item.checked = state.picked.has(item.value);
+    if (box.checked) state.picked.add(box.value);
+    else state.picked.delete(box.value);
+    renderPickedCount();
+  });
+  $("#mx-pall").addEventListener("click", () => {
+    const boxes = pickerBoxes();
+    const select = canSelectMore();
+    for (const box of boxes) {
+      if (!select) state.picked.delete(box.value);
+      else if (state.picked.size < MAX_PROJECTS) state.picked.add(box.value);
     }
-    $("#mx-picked").textContent = `Projekt (${state.picked.size} valda)`;
+    const full = select && boxes.some((box) => !state.picked.has(box.value));
+    renderPicker();
     if (full) log(`Högst ${MAX_PROJECTS} projekt åt gången.`, "error");
   });
 
